@@ -1,0 +1,291 @@
+{% extends 'quests/base.html' %}
+{% block content %}
+
+<!-- ВЕРХНЯЯ ПАНЕЛЬ ГЕРОЯ (HUD) -->
+<div class="nes-container is-dark with-title warspear-panel">
+    <p class="title" style="background:#282130; color:#f7d51d;">Профиль Героя Аринара</p>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
+        <div style="display:flex; align-items:center; gap:15px;">
+            <!-- Пиксельный аватар героя -->
+            <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/475.gif" 
+                 style="width:64px; height:64px; image-rendering:pixelated;" alt="Hero">
+            <div>
+                <div style="color:#f7d51d; font-size:14px;">{{ character.hero_name }}</div>
+                <div style="color:#92cc41; margin: 5px 0;">{{ character.get_character_class_display }}</div>
+                <div>Уровень: <span id="hud-level" class="nes-text is-warning">{{ character.level }}</span> | 
+                     Золото: <span id="hud-gold" class="nes-text is-warning">{{ character.gold }}</span> 🪙</div>
+            </div>
+        </div>
+
+        <div style="flex:1; min-width:250px; max-width:450px;">
+            <div style="margin-bottom:5px;">
+                Опыт (XP): <span id="hud-xp">{{ character.xp }}</span> / <span id="hud-next-xp">{{ character.xp_to_next_level }}</span>
+            </div>
+            <progress id="hud-xp-bar" class="nes-progress is-success" value="{{ character.xp_percentage }}" max="100" style="height:22px;"></progress>
+        </div>
+
+        <div>
+            <button class="nes-btn is-primary" onclick="document.getElementById('quest-form-box').style.display='block'">+ Призвать квест</button>
+            <form action="{% url 'logout' %}" method="post" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="nes-btn is-error">Выход</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ФОРМА СОЗДАНИЯ КВЕСТА (СКРЫТА ПО УМОЛЧАНИЮ) -->
+<div id="quest-form-box" class="nes-container is-dark with-title warspear-panel" style="display:none;">
+    <p class="title" style="background:#282130;">Свиток Нового Задания</p>
+    <form method="post" action="{% url 'create_quest' %}">
+        {% csrf_token %}
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
+            {% for field in form %}
+                <div>
+                    <label>{{ field.label }}</label>
+                    {{ field }}
+                </div>
+            {% endfor %}
+        </div>
+        <div style="margin-top:15px;">
+            <button type="submit" class="nes-btn is-success">Записать в журнал</button>
+            <button type="button" class="nes-btn" onclick="document.getElementById('quest-form-box').style.display='none'">Отмена</button>
+        </div>
+    </form>
+</div>
+
+<!-- ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК: ПО ДНЯМ НЕДЕЛИ / КАЛЕНДАРЬ -->
+<div style="margin-bottom: 15px;">
+    <button class="nes-btn is-warning" onclick="switchTab('week')">Доска по дням недели</button>
+    <button class="nes-btn is-primary" onclick="switchTab('calendar')">Календарь Походов</button>
+</div>
+
+<!-- 1. ДОСКА ПО ДНЯМ НЕДЕЛИ -->
+<div id="tab-week" class="week-grid">
+    {% for day in days_board %}
+    <div class="nes-container is-dark with-title warspear-panel">
+        <p class="title" style="background:#282130; color:#e76e55;">{{ day.day_name }}</p>
+        {% for quest in day.quests %}
+            <div class="quest-card {{ quest.status }}" id="card-{{ quest.id }}">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong style="color:#f7d51d;">{{ quest.title }}</strong>
+                    <img src="{{ quest.monster_data.sprite }}" style="width:42px; height:42px;" alt="mob">
+                </div>
+                <p style="font-size:9px; color:#aaa; margin:6px 0;">{{ quest.description }}</p>
+
+                <!-- Мета-данные: сложность, время, повтор -->
+                <div style="font-size:9px; line-height:1.7;">
+                    <div>💀 Сложность: 
+                        {% if quest.difficulty == 1 %}<span class="nes-text is-success">Обычный (+35 XP)</span>
+                        {% elif quest.difficulty == 2 %}<span class="nes-text is-warning">Элита (+80 XP)</span>
+                        {% else %}<span class="nes-text is-error">Рейд-Босс (+200 XP)</span>{% endif %}
+                    </div>
+                    <div>⏳ Длительность: {{ quest.duration_minutes }} мин. 
+                        {% if quest.start_time %} (Старт в {{ quest.start_time|time:"H:i" }}){% endif %}
+                    </div>
+                    <div>🔄 Повтор: {{ quest.get_repeat_display }}</div>
+                    <div>🛡️ Пати: 
+                        {% for member in quest.party.all %}
+                            <span style="color:#209cee;">@{{ member.username }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Теги -->
+                <div style="margin: 6px 0;">
+                    {% for tag in quest.tags.all %}
+                        <span class="tag-badge">#{{ tag.name }}</span>
+                    {% endfor %}
+                </div>
+
+                <!-- Кнопки боя и управления -->
+                <div style="margin-top: 10px; display:flex; gap:6px; flex-wrap:wrap;">
+                    {% if quest.status == 'idle' %}
+                        <button class="nes-btn is-warning" style="font-size:9px;" onclick="startBattle({{ quest.id }})">
+                            ⚔️ Начать бой
+                        </button>
+                    {% elif quest.status == 'in_battle' %}
+                        <button class="nes-btn is-error" style="font-size:9px;" onclick="openArenaModal({{ quest.id }})">
+                            🔥 В БОЮ! (Открыть арену)
+                        </button>
+                    {% else %}
+                        <span class="nes-text is-primary">🏆 Монстр повержен!</span>
+                    {% endif %}
+                    <a href="{% url 'delete_quest' quest.id %}" class="nes-btn is-error" style="font-size:8px; padding:2px 6px;">X</a>
+                </div>
+            </div>
+        {% empty %}
+            <p style="font-size:9px; color:#666;">Монстров не обнаружено...</p>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 2. КАЛЕНДАРЬ ПРОСМОТРА ЗАДАНИЙ -->
+<div id="tab-calendar" class="nes-container is-dark with-title warspear-panel" style="display:none;">
+    <p class="title" style="background:#282130;">Календарь Рейдов ({{ today|date:"F Y" }})</p>
+    <table class="cal-table">
+        <thead>
+            <tr style="color:#f7d51d;">
+                <th>ПН</th><th>ВТ</th><th>СР</th><th>ЧТ</th><th>ПТ</th><th>СБ</th><th>ВС</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for week in calendar_data %}
+            <tr>
+                {% for day in week %}
+                <td style="{% if not day.is_current_month %}opacity:0.3;{% endif %} {% if day.date == today %}background:#3a2b4c;{% endif %}">
+                    <div style="font-size:9px; color:#aaa; margin-bottom:4px;">{{ day.date.day }}</div>
+                    {% for q in day.quests %}
+                        <div style="background:#4a2535; border:1px solid #f7d51d; padding:3px; font-size:8px; margin-bottom:3px; cursor:pointer;"
+                             onclick="startBattle({{ q.id }})">
+                            ⚔️ {{ q.title }}
+                        </div>
+                    {% endfor %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- ОТДЕЛЬНОЕ ОКНО БИТВЫ С МОНСТРОМ (АРЕНА) -->
+<div id="battle-modal">
+    <div class="nes-container is-dark with-title warspear-panel" style="width:760px; max-width:95%;">
+        <p class="title" id="arena-title" style="background:#282130; color:#ff3860;">БИТВА НАЧАЛАСЬ!</p>
+
+        <!-- Полоса здоровья монстра -->
+        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+            <span id="arena-monster-name" style="color:#f7d51d;">Монстр</span>
+            <span>HP: <span id="arena-monster-hp">100</span></span>
+        </div>
+        <progress id="arena-hp-bar" class="nes-progress is-error" value="100" max="100" style="height:18px; margin-bottom:12px;"></progress>
+
+        <!-- Сцена с локацией, героем и монстром -->
+        <div id="arena-stage" class="arena-stage">
+            <div id="damage-popup" class="damage-popup">-9999 CRIT!</div>
+
+            <!-- Спрайт Героя -->
+            <div style="text-align:center;">
+                <div style="font-size:9px; background:rgba(0,0,0,0.7); padding:3px; margin-bottom:5px;">{{ character.hero_name }}</div>
+                <img id="hero-sprite" class="sprite-unit" 
+                     src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/back/475.gif" alt="Hero">
+            </div>
+
+            <!-- Спрайт Монстра -->
+            <div style="text-align:center;">
+                <div id="mob-label" style="font-size:9px; background:rgba(0,0,0,0.7); padding:3px; margin-bottom:5px;">Босс</div>
+                <img id="monster-sprite" class="sprite-unit" src="" alt="Monster">
+            </div>
+        </div>
+
+        <div id="battle-log" style="margin:12px 0; color:#92cc41; min-height:24px; text-align:center;">
+            Вы вступили в бой! Выполняйте задание в реальном мире, чтобы сокрушить врага!
+        </div>
+
+        <div style="display:flex; justify-content:space-between; margin-top:15px;">
+            <button id="strike-btn" class="nes-btn is-success" onclick="deliverFinalBlow()">
+                ⚡ ЗАВЕРШИТЬ КВЕСТ (НАНЕСТИ ПОБЕДНЫЙ УДАР!)
+            </button>
+            <button class="nes-btn" onclick="closeArena()">Свернуть окно боя</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let activeQuestId = null;
+
+    function switchTab(tab) {
+        document.getElementById('tab-week').style.display = (tab === 'week') ? 'grid' : 'none';
+        document.getElementById('tab-calendar').style.display = (tab === 'calendar') ? 'block' : 'none';
+    }
+
+    function startBattle(questId) {
+        fetch(`/api/quest/${questId}/start/`, {
+            method: 'POST',
+            headers: {'X-CSRFToken': '{{ csrf_token }}'}
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                activeQuestId = data.quest_id;
+                document.getElementById('arena-title').innerText = `КВЕСТ: ${data.quest_title}`;
+                document.getElementById('arena-monster-name').innerText = data.monster_name;
+                document.getElementById('mob-label').innerText = data.monster_name;
+                document.getElementById('arena-monster-hp').innerText = data.monster_hp;
+                document.getElementById('arena-hp-bar').value = 100;
+
+                const mobSprite = document.getElementById('monster-sprite');
+                mobSprite.src = data.monster_sprite;
+                mobSprite.className = 'sprite-unit';
+
+                document.getElementById('arena-stage').style.background = data.bg;
+                document.getElementById('strike-btn').disabled = false;
+                document.getElementById('battle-log').innerText = 
+                    `Группа [${data.party_members.join(', ')}] сражается! Таймер похода: ${data.duration} мин.`;
+                document.getElementById('battle-modal').style.display = 'flex';
+            }
+        });
+    }
+
+    function openArenaModal(questId) {
+        startBattle(questId);
+    }
+
+    function deliverFinalBlow() {
+        if (!activeQuestId) return;
+        const hero = document.getElementById('hero-sprite');
+        const monster = document.getElementById('monster-sprite');
+        const dmg = document.getElementById('damage-popup');
+        document.getElementById('strike-btn').disabled = true;
+
+        // 1. Анимация рывка героя и победного удара
+        hero.classList.add('hero-lunge');
+        setTimeout(() => {
+            dmg.style.display = 'block';
+            monster.classList.add('monster-hit');
+            document.getElementById('arena-hp-bar').value = 0;
+            document.getElementById('arena-monster-hp').innerText = 0;
+        }, 250);
+
+        // 2. Анимация растворения поверженного монстра
+        setTimeout(() => {
+            hero.classList.remove('hero-lunge');
+            monster.classList.add('monster-dead');
+        }, 650);
+
+        // 3. Отправка запроса на сервер и начисление опыта
+        setTimeout(() => {
+            fetch(`/api/quest/${activeQuestId}/finish/`, {
+                method: 'POST',
+                headers: {'X-CSRFToken': '{{ csrf_token }}'}
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'victory') {
+                    let msg = `🏆 ПОБЕДА! Получено +${data.xp_gained} XP и +${data.gold_gained} золота всей группе!`;
+                    if (data.leveled_up) {
+                        msg += ` 🌟 НОВЫЙ УРОВЕНЬ: ${data.new_level}!`;
+                    }
+                    document.getElementById('battle-log').innerText = msg;
+
+                    // Обновляем HUD без перезагрузки
+                    document.getElementById('hud-level').innerText = data.new_level;
+                    document.getElementById('hud-gold').innerText = data.gold;
+                    document.getElementById('hud-xp').innerText = data.current_xp;
+                    document.getElementById('hud-next-xp').innerText = data.next_xp;
+                    document.getElementById('hud-xp-bar').value = data.xp_percent;
+
+                    setTimeout(() => { window.location.reload(); }, 2200);
+                }
+            });
+        }, 1100);
+    }
+
+    function closeArena() {
+        document.getElementById('battle-modal').style.display = 'none';
+        window.location.reload();
+    }
+</script>
+{% endblock %}
