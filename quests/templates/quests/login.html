@@ -1,0 +1,14 @@
+{% extends 'quests/base.html' %}
+{% block content %}
+<div class="nes-container is-dark with-title warspear-panel" style="max-width: 450px; margin: 60px auto;">
+    <p class="title" style="background:#282130; color:#f7d51d;">Таверна: Вход в игру</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="nes-btn is-primary" style="width:100%;">Продолжить поход</button>
+    </form>
+    <div style="margin-top:15px; text-align:center;">
+        Нет героя? <a href="{% url 'register' %}" class="nes-text is-success">Создать персонажа</a>
+    </div>
+</div>
+{% endblock %}
