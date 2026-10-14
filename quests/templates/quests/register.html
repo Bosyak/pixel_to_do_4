@@ -1,0 +1,22 @@
+{% extends 'quests/base.html' %}
+{% block content %}
+<div class="nes-container is-dark with-title warspear-panel" style="max-width: 520px; margin: 40px auto;">
+    <p class="title" style="background:#282130; color:#f7d51d;">Создание Персонажа</p>
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+            <div style="margin-bottom: 14px;">
+                <label style="display:block; margin-bottom:6px; color:#92cc41;">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                    <div class="nes-text is-error" style="font-size:9px;">{{ field.errors|striptags }}</div>
+                {% endif %}
+            </div>
+        {% endfor %}
+        <button type="submit" class="nes-btn is-success" style="width:100%;">Войти в мир Аринара</button>
+    </form>
+    <div style="margin-top:15px; text-align:center;">
+        Уже есть герой? <a href="{% url 'login' %}" class="nes-text is-warning">Авторизация</a>
+    </div>
+</div>
+{% endblock %}
